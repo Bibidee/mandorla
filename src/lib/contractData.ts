@@ -1,7 +1,9 @@
 /**
  * Server-side contract reads for Next.js server components.
  * Calls the deployed MandorlaSharedDecision contract on Studionet.
+ * This file must only run on the server.
  */
+import "server-only";
 
 import type { Case, Evidence, FinalResult } from "./types";
 
