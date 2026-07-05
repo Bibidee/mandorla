@@ -36,7 +36,7 @@ GENLAYER_NETWORK=localnet npx ts-node deploy.ts
 
 Get test GEN from the 💧 faucet button inside [GenLayer Studio](https://studio.genlayer.com).
 
-Then add the printed address to `mandorla-app/.env.local`:
+Then add the printed address to `.env.local`:
 
 ```
 NEXT_PUBLIC_CONTRACT_ADDRESS=0x...
