@@ -1,20 +1,24 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { MOCK_CASES, STATUS_LABELS, CASE_TYPE_LABELS } from "@/lib/mockData";
+import { STATUS_LABELS, CASE_TYPE_LABELS } from "@/lib/mockData";
+import { getCaseWithEvidence } from "@/lib/contractData";
 import { OverlapField } from "@/components/OverlapField";
 import { EvidenceTile } from "@/components/EvidenceTile";
 import { MiddleOutcomeCard } from "@/components/MiddleOutcomeCard";
+
+export const revalidate = 15;
 
 interface Props { params: Promise<{ id: string }> }
 
 export default async function CaseDetailPage({ params }: Props) {
   const { id } = await params;
-  const c = MOCK_CASES.find((x) => x.case_id === Number(id));
-  if (!c) notFound();
+  const data = await getCaseWithEvidence(Number(id));
+  if (!data) notFound();
 
-  const claimantEvidence = c.evidence?.filter((e) => e.side === "claimant") ?? [];
-  const respondentEvidence = c.evidence?.filter((e) => e.side === "respondent") ?? [];
-  const neutralEvidence = c.evidence?.filter((e) => e.side === "neutral") ?? [];
+  const { c, evidence } = data;
+  const claimantEvidence = evidence.filter((e) => e.side === "claimant");
+  const respondentEvidence = evidence.filter((e) => e.side === "respondent");
+  const neutralEvidence = evidence.filter((e) => e.side === "neutral");
 
   const isResolved = c.status === "resolved" || c.status === "settled";
   const isReady = c.status === "ready_for_resolution";
@@ -33,7 +37,7 @@ export default async function CaseDetailPage({ params }: Props) {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-xs px-2 py-0.5 rounded bg-plum text-parchment/50 font-mono border border-lavender/10">
-              {CASE_TYPE_LABELS[c.case_type]}
+              {CASE_TYPE_LABELS[c.case_type] ?? c.case_type}
             </span>
             <StatusChip status={c.status} />
           </div>
@@ -53,7 +57,6 @@ export default async function CaseDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Ready for resolution banner */}
       {isReady && (
         <div className="mb-8 p-4 rounded-xl border border-gold/30 bg-gold/5 flex items-center justify-between gap-4">
           <div>
@@ -66,18 +69,10 @@ export default async function CaseDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Main three-zone layout */}
+      {/* Three-zone layout */}
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px_1fr] gap-6 mb-12">
-        {/* Left — Claimant truth */}
-        <TruthColumn
-          side="claimant"
-          position={c.claimant_position}
-          requestedOutcome={c.requested_outcome}
-          evidence={claimantEvidence}
-          address={c.creator}
-        />
+        <TruthColumn side="claimant" position={c.claimant_position} requestedOutcome={c.requested_outcome} evidence={claimantEvidence} address={c.creator} />
 
-        {/* Centre — Overlap Field */}
         <div className="flex flex-col items-center gap-6">
           <div className="panel p-6 flex flex-col items-center gap-4 w-full">
             <p className="font-mono text-xs text-parchment/40 uppercase tracking-wider">Overlap Field</p>
@@ -94,28 +89,16 @@ export default async function CaseDetailPage({ params }: Props) {
             ) : (
               <OverlapField size="md" animated />
             )}
-
-            {/* Shared/neutral facts */}
             <div className="w-full border-t border-lavender/10 pt-4">
               <p className="text-xs text-parchment/40 font-mono mb-2">Evidence count</p>
               <div className="flex gap-3 text-center">
-                <div className="flex-1">
-                  <p className="font-mono text-clay text-lg">{claimantEvidence.length}</p>
-                  <p className="text-xs text-parchment/30">claimant</p>
-                </div>
-                <div className="flex-1">
-                  <p className="font-mono text-gold text-lg">{neutralEvidence.length}</p>
-                  <p className="text-xs text-parchment/30">neutral</p>
-                </div>
-                <div className="flex-1">
-                  <p className="font-mono text-lavender text-lg">{respondentEvidence.length}</p>
-                  <p className="text-xs text-parchment/30">respondent</p>
-                </div>
+                <div className="flex-1"><p className="font-mono text-clay text-lg">{claimantEvidence.length}</p><p className="text-xs text-parchment/30">claimant</p></div>
+                <div className="flex-1"><p className="font-mono text-gold text-lg">{neutralEvidence.length}</p><p className="text-xs text-parchment/30">neutral</p></div>
+                <div className="flex-1"><p className="font-mono text-lavender text-lg">{respondentEvidence.length}</p><p className="text-xs text-parchment/30">respondent</p></div>
               </div>
             </div>
           </div>
 
-          {/* Deadlines */}
           <div className="panel-dark p-4 rounded-xl w-full">
             <p className="font-mono text-xs text-parchment/40 mb-3 uppercase tracking-wider">Deadlines</p>
             <div className="flex flex-col gap-2">
@@ -131,29 +114,16 @@ export default async function CaseDetailPage({ params }: Props) {
           </div>
         </div>
 
-        {/* Right — Respondent truth */}
-        <TruthColumn
-          side="respondent"
-          position={c.respondent_position}
-          requestedOutcome={c.counter_outcome}
-          evidence={respondentEvidence}
-          address={c.respondent}
-        />
+        <TruthColumn side="respondent" position={c.respondent_position} requestedOutcome={c.counter_outcome} evidence={respondentEvidence} address={c.respondent} />
       </div>
 
-      {/* Middle outcome result */}
       {isResolved && c.final_result && (
         <div className="mb-12">
           <h2 className="font-display text-2xl text-parchment mb-4">Middle Outcome</h2>
-          <MiddleOutcomeCard
-            result={c.final_result}
-            amountAtStake={c.amount_at_stake}
-            assetSymbol={c.asset_symbol}
-          />
+          <MiddleOutcomeCard result={c.final_result} amountAtStake={c.amount_at_stake} assetSymbol={c.asset_symbol} />
         </div>
       )}
 
-      {/* Add evidence */}
       {!isResolved && (
         <div className="mt-8 panel-dark rounded-xl p-6">
           <h3 className="font-display text-xl text-parchment mb-2">Submit Evidence</h3>
@@ -165,13 +135,7 @@ export default async function CaseDetailPage({ params }: Props) {
   );
 }
 
-function TruthColumn({
-  side,
-  position,
-  requestedOutcome,
-  evidence,
-  address,
-}: {
+function TruthColumn({ side, position, requestedOutcome, evidence, address }: {
   side: "claimant" | "respondent";
   position?: string;
   requestedOutcome?: string;
@@ -188,7 +152,6 @@ function TruthColumn({
       <div className={`panel p-5 border-t-2 ${borderColor}`}>
         <p className={`font-mono text-xs ${color} uppercase tracking-wider mb-3`}>{label}</p>
         <p className="font-mono text-xs text-parchment/30 mb-3 truncate">{address}</p>
-
         {position ? (
           <p className="text-sm text-parchment/80 leading-relaxed mb-4">{position}</p>
         ) : (
@@ -196,30 +159,20 @@ function TruthColumn({
             {isClaimant ? "No position submitted." : "Waiting for the respondent to add context."}
           </p>
         )}
-
         {requestedOutcome && (
           <div className="border-t border-lavender/10 pt-3">
-            <p className="text-xs text-parchment/40 font-mono mb-1">
-              {isClaimant ? "Requested outcome" : "Counter outcome"}
-            </p>
+            <p className="text-xs text-parchment/40 font-mono mb-1">{isClaimant ? "Requested outcome" : "Counter outcome"}</p>
             <p className="text-sm text-parchment/70">{requestedOutcome}</p>
           </div>
         )}
       </div>
-
-      {/* Evidence */}
       <div className="flex flex-col gap-3">
-        {(evidence ?? []).map((e) => (
-          <EvidenceTile key={e.evidence_id} evidence={e} />
-        ))}
-        {(evidence ?? []).length === 0 && (
+        {evidence.map((e) => <EvidenceTile key={e.evidence_id} evidence={e} />)}
+        {evidence.length === 0 && (
           <div className="panel-dark p-4 rounded-xl text-center">
             <p className="text-parchment/30 text-xs italic">
               {isClaimant ? "The middle is still invisible." : "No evidence from this side yet."}
             </p>
-            {!isClaimant && (
-              <p className="text-parchment/20 text-xs mt-1">Add evidence from at least one side.</p>
-            )}
           </div>
         )}
       </div>
@@ -247,6 +200,7 @@ function StatusChip({ status }: { status: string }) {
 }
 
 function EvidenceForm({ caseId }: { caseId: number }) {
+  void caseId;
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div className="flex flex-col gap-1">

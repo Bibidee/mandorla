@@ -1,19 +1,21 @@
 import Link from "next/link";
 import { CaseCard } from "@/components/CaseCard";
-import { MOCK_CASES, STATUS_LABELS } from "@/lib/mockData";
+import { getAllCases } from "@/lib/contractData";
 
-export default function CasesPage() {
-  const statuses = ["all", "open", "evidence_open", "ready_for_resolution", "resolved", "settled"];
+export const revalidate = 30; // recheck every 30s
+
+export default async function CasesPage() {
+  const cases = await getAllCases();
+  const readyCount = cases.filter(c => c.status === "ready_for_resolution").length;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-10">
         <div>
           <p className="font-mono text-xs text-parchment/40 mb-2 uppercase tracking-wider">Case Observatory</p>
           <h1 className="font-display text-4xl text-parchment">All Overlaps</h1>
           <p className="text-parchment/50 text-sm mt-2">
-            {MOCK_CASES.length} cases mapped — {MOCK_CASES.filter(c => c.status === "ready_for_resolution").length} ready for resolution
+            {cases.length} cases mapped — {readyCount} ready for resolution
           </p>
         </div>
         <Link
@@ -24,12 +26,11 @@ export default function CasesPage() {
         </Link>
       </div>
 
-      {/* Empty state check */}
-      {MOCK_CASES.length === 0 ? (
+      {cases.length === 0 ? (
         <EmptyState />
       ) : (
         <div className="columns-1 sm:columns-2 lg:columns-3 gap-5 space-y-5">
-          {MOCK_CASES.map((c) => (
+          {cases.map((c) => (
             <div key={c.case_id} className="break-inside-avoid">
               <CaseCard c={c} />
             </div>

@@ -1,13 +1,30 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { MOCK_CASES, STATUS_LABELS, CASE_TYPE_LABELS } from "@/lib/mockData";
+import { CASE_TYPE_LABELS } from "@/lib/mockData";
 import { OverlapField } from "@/components/OverlapField";
+import type { Case } from "@/lib/types";
 
 export default function ResolvePage() {
-  const ready = MOCK_CASES.filter((c) => c.status === "ready_for_resolution");
+  const [ready, setReady] = useState<Case[]>([]);
+  const [loading, setLoading] = useState(true);
   const [resolving, setResolving] = useState<number | null>(null);
   const [resolved, setResolved] = useState<number[]>([]);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const { getAllCases } = await import("@/lib/contractData");
+        const all = await getAllCases();
+        setReady(all.filter(c => c.status === "ready_for_resolution"));
+      } catch {
+        setReady([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
 
   function handleResolve(caseId: number) {
     setResolving(caseId);
@@ -23,11 +40,15 @@ export default function ResolvePage() {
         <p className="font-mono text-xs text-parchment/40 mb-2 uppercase tracking-wider">Resolution Console</p>
         <h1 className="font-display text-4xl text-parchment">Cases Ready for Resolution</h1>
         <p className="text-parchment/50 text-sm mt-2">
-          {ready.length} {ready.length === 1 ? "case" : "cases"} waiting for GenLayer validators to map the fair middle.
+          {loading ? "Loading…" : `${ready.length} ${ready.length === 1 ? "case" : "cases"} waiting for GenLayer validators to map the fair middle.`}
         </p>
       </div>
 
-      {ready.length === 0 ? (
+      {loading ? (
+        <div className="text-center py-24">
+          <p className="font-display text-2xl text-parchment/40">Loading cases from chain…</p>
+        </div>
+      ) : ready.length === 0 ? (
         <div className="text-center py-24">
           <p className="font-display text-2xl text-parchment/40 mb-2">No cases ready yet.</p>
           <p className="text-parchment/30 text-sm">Cases appear here once both sides have submitted evidence.</p>
@@ -39,12 +60,11 @@ export default function ResolvePage() {
             const isDone = resolved.includes(c.case_id);
             return (
               <div key={c.case_id} className="panel p-6 flex flex-col md:flex-row gap-6 ready-glow">
-                {/* Info */}
                 <div className="flex-1 flex flex-col gap-3">
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-xs text-parchment/40">CASE-{String(c.case_id).padStart(4,"0")}</span>
                     <span className="text-xs px-2 py-0.5 rounded bg-plum text-parchment/50 font-mono border border-lavender/10">
-                      {CASE_TYPE_LABELS[c.case_type]}
+                      {CASE_TYPE_LABELS[c.case_type] ?? c.case_type}
                     </span>
                   </div>
                   <h2 className="font-display text-2xl text-parchment">{c.case_title}</h2>
@@ -61,9 +81,7 @@ export default function ResolvePage() {
                     <div className="mt-2 flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-gold" />
                       <p className="text-sm text-gold">Validators are mapping overlap…</p>
-                      <Link href={`/cases/${c.case_id}`} className="text-xs text-parchment/50 underline hover:text-parchment ml-auto">
-                        View case
-                      </Link>
+                      <Link href={`/cases/${c.case_id}`} className="text-xs text-parchment/50 underline hover:text-parchment ml-auto">View case</Link>
                     </div>
                   ) : (
                     <button
@@ -76,11 +94,8 @@ export default function ResolvePage() {
                   )}
                 </div>
 
-                {/* Overlap preview */}
                 <div className="flex flex-col items-center justify-center">
-                  {isResolving ? (
-                    <ResolvingAnimation />
-                  ) : isDone ? (
+                  {isResolving ? <ResolvingAnimation /> : isDone ? (
                     <div className="text-center px-4">
                       <div className="w-16 h-16 mx-auto mb-3 rounded-full bg-gold/20 border border-gold/40 flex items-center justify-center">
                         <span className="text-2xl">⚖️</span>
