@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300&family=Inter:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+@import "tailwindcss";
+
+@theme {
+  --color-aubergine: #241827;
+  --color-plum: #4B2E4F;
+  --color-clay: #C07A5A;
+  --color-parchment: #F4E8D1;
+  --color-apricot: #E8B98F;
+  --color-lavender: #C9B8D8;
+  --color-inkbrown: #2B211C;
+  --color-gold: #D8A84F;
+  --color-bluegrey: #8395A7;
+  --color-faultrose: #B96071;
+
+  --font-family-display: "Fraunces", "Georgia", serif;
+  --font-family-body: "Inter", sans-serif;
+  --font-family-mono: "IBM Plex Mono", monospace;
+
+  --animate-pulse-slow: pulse-slow 3s cubic-bezier(0.4,0,0.6,1) infinite;
+  --animate-fade-in: fade-in 0.4s ease-out;
+
+  @keyframes pulse-slow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+
+body {
+  background-color: #241827;
+  color: #F4E8D1;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #241827; }
+::-webkit-scrollbar-thumb { background: #4B2E4F; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #D8A84F; }
+
+.font-display { font-family: 'Fraunces', Georgia, serif; }
+.font-mono-custom { font-family: 'IBM Plex Mono', monospace; }
+
+.gold-glow {
+  box-shadow: 0 0 20px rgba(216,168,79,0.4), 0 0 40px rgba(216,168,79,0.15);
+}
+.gold-glow-sm {
+  box-shadow: 0 0 10px rgba(216,168,79,0.3);
+}
+.ready-glow {
+  box-shadow: 0 0 0 1px rgba(216,168,79,0.5), 0 0 20px rgba(216,168,79,0.15);
+}
+.panel {
+  background: #4B2E4F;
+  border: 1px solid rgba(201,184,216,0.15);
+  border-radius: 12px;
+}
+.panel-dark {
+  background: rgba(36,24,39,0.8);
+  border: 1px solid rgba(201,184,216,0.1);
+  border-radius: 12px;
+}
