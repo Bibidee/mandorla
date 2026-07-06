@@ -17,7 +17,7 @@ import { createClient, createAccount } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
 
-const CONTRACT = "0xfB8cecc8B11f7Fc8CE899B0bcAA183dEaC9390FB";
+const CONTRACT = process.env.GENLAYER_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
 
 const CLAIMANT_KEY = (process.env.GENLAYER_PRIVATE_KEY ?? "") as `0x${string}`;
 const RESPONDENT_KEY = (process.env.GENLAYER_RESPONDENT_KEY ?? "") as `0x${string}`;
@@ -43,13 +43,24 @@ async function write(client: typeof clientA, fn: string, args: unknown[]) {
     functionName: fn,
     args,
   });
-  await client.waitForTransactionReceipt({
+  const receipt: any = await client.waitForTransactionReceipt({
     hash,
     status: TransactionStatus.FINALIZED,
     retries: 60,
     interval: 4000,
   });
+  const execResult = receipt.consensus_data?.leader_receipt?.[0]?.execution_result;
+  if (execResult !== "SUCCESS") {
+    const stderr = receipt.consensus_data?.leader_receipt?.[0]?.genvm_result?.stderr ?? "";
+    throw new Error(`${fn} failed on-chain (execution_result: ${execResult})\n${stderr}`);
+  }
   return hash;
+}
+
+async function createCase(client: typeof clientA, args: unknown[]): Promise<number> {
+  await write(client, "create_case", args);
+  const count = await read("get_case_count");
+  return Number(count);
 }
 
 async function read(fn: string, args: unknown[] = []) {
@@ -72,7 +83,7 @@ async function main() {
 
   // ── Case 1: Freelance web redesign (will go to ready_for_resolution) ─────────
   console.log("Creating Case 1: Website Redesign Dispute…");
-  const case1Id = await write(clientA, "create_case", [
+  const case1Id = await createCase(clientA, [
     "Website Redesign — Partial Delivery",
     "freelance_delivery",
     respondent.address,
@@ -125,9 +136,9 @@ async function main() {
 
   // ── Case 2: DAO grant milestone dispute (evidence open) ────────────────────
   console.log("Creating Case 2: DAO Grant Milestone Dispute…");
-  const case2Id = await write(clientA, "create_case", [
+  const case2Id = await createCase(clientA, [
     "DAO Grant — Milestone 2 Payment",
-    "dao_grant",
+    "grant_milestone",
     respondent.address,
     "10,000 GEN grant for building a public goods tool. Milestone 2: functional prototype with at least 100 test users.",
     "The prototype was shipped on time. We had 147 test users over 3 weeks as documented in our public analytics dashboard. The milestone criteria are objectively met.",
@@ -167,9 +178,9 @@ async function main() {
 
   // ── Case 3: Token vesting dispute (resolved) ────────────────────────────────
   console.log("Creating Case 3: Token Vesting — Early Termination…");
-  const case3Id = await write(clientA, "create_case", [
+  const case3Id = await createCase(clientA, [
     "Token Vesting — Early Termination Dispute",
-    "token_vesting",
+    "dao_compensation",
     respondent.address,
     "2-year token vesting for lead developer. 4,500 GEN total, monthly cliff unlocks. Developer left after 14 months citing hostile work environment.",
     "I completed 14 of 24 months and left due to documented harassment from the co-founder. My departure was for cause on the company's side, not voluntary. I am owed 14/24ths of the total plus a hostile termination premium.",

@@ -78,24 +78,24 @@ class MandorlaSharedDecision(gl.Contract):
         The caller becomes the claimant (creator).
         """
         if not case_title.strip():
-            raise gl.UserError("Case title cannot be empty")
+            raise gl.vm.UserError("Case title cannot be empty")
         if case_type not in VALID_CASE_TYPES:
-            raise gl.UserError(f"Invalid case type: {case_type}. Valid: {', '.join(sorted(VALID_CASE_TYPES))}")
+            raise gl.vm.UserError(f"Invalid case type: {case_type}. Valid: {', '.join(sorted(VALID_CASE_TYPES))}")
         if len(claimant_position.strip()) < 10:
-            raise gl.UserError("Claimant position must be at least 10 characters")
+            raise gl.vm.UserError("Claimant position must be at least 10 characters")
         if not agreement_summary.strip():
-            raise gl.UserError("Agreement summary cannot be empty")
+            raise gl.vm.UserError("Agreement summary cannot be empty")
         if int(amount_at_stake) < 0:
-            raise gl.UserError("Amount at stake cannot be negative")
+            raise gl.vm.UserError("Amount at stake cannot be negative")
         if int(evidence_deadline) >= int(resolution_deadline):
-            raise gl.UserError("Evidence deadline must be before resolution deadline")
+            raise gl.vm.UserError("Evidence deadline must be before resolution deadline")
 
         self.case_count = u32(int(self.case_count) + 1)
         case_id = self.case_count
 
         case_data = {
             "case_id": int(case_id),
-            "creator": str(gl.message.sender),
+            "creator": str(gl.message.sender_address),
             "respondent": respondent,
             "case_title": case_title,
             "case_type": case_type,
@@ -132,12 +132,12 @@ class MandorlaSharedDecision(gl.Contract):
         """
         case = _load_case(self, case_id)
 
-        if str(gl.message.sender) != case["respondent"]:
-            raise gl.UserError("Only the named respondent can respond to this case")
+        if str(gl.message.sender_address) != case["respondent"]:
+            raise gl.vm.UserError("Only the named respondent can respond to this case")
         if case["status"] != "open":
-            raise gl.UserError(f"Case is not open for response (current status: {case['status']})")
+            raise gl.vm.UserError(f"Case is not open for response (current status: {case['status']})")
         if not respondent_position.strip():
-            raise gl.UserError("Respondent position cannot be empty")
+            raise gl.vm.UserError("Respondent position cannot be empty")
 
         case["respondent_position"] = respondent_position
         case["counter_outcome"] = counter_outcome
@@ -166,15 +166,15 @@ class MandorlaSharedDecision(gl.Contract):
         case = _load_case(self, case_id)
 
         if case["status"] not in ("open", "responded", "evidence_open"):
-            raise gl.UserError(f"Case is not accepting evidence (status: {case['status']})")
+            raise gl.vm.UserError(f"Case is not accepting evidence (status: {case['status']})")
         if side not in VALID_EVIDENCE_SIDES:
-            raise gl.UserError(f"Invalid side: {side}. Must be: claimant, respondent, or neutral")
+            raise gl.vm.UserError(f"Invalid side: {side}. Must be: claimant, respondent, or neutral")
         if evidence_type not in VALID_EVIDENCE_TYPES:
-            raise gl.UserError(f"Invalid evidence type: {evidence_type}")
+            raise gl.vm.UserError(f"Invalid evidence type: {evidence_type}")
         if not title.strip():
-            raise gl.UserError("Evidence title is required")
+            raise gl.vm.UserError("Evidence title is required")
         if not summary.strip():
-            raise gl.UserError("Evidence summary is required")
+            raise gl.vm.UserError("Evidence summary is required")
 
         self.evidence_count = u32(int(self.evidence_count) + 1)
         evidence_id = self.evidence_count
@@ -182,7 +182,7 @@ class MandorlaSharedDecision(gl.Contract):
         evidence_data = {
             "evidence_id": int(evidence_id),
             "case_id": int(case_id),
-            "submitted_by": str(gl.message.sender),
+            "submitted_by": str(gl.message.sender_address),
             "side": side,
             "evidence_type": evidence_type,
             "title": title,
@@ -212,12 +212,12 @@ class MandorlaSharedDecision(gl.Contract):
         In production, this would also check evidence_deadline timestamp.
         """
         case = _load_case(self, case_id)
-        caller = str(gl.message.sender)
+        caller = str(gl.message.sender_address)
 
         if caller != case["creator"] and caller != case["respondent"]:
-            raise gl.UserError("Only case parties can advance to ready")
+            raise gl.vm.UserError("Only case parties can advance to ready")
         if case["status"] not in ("responded", "evidence_open"):
-            raise gl.UserError(f"Cannot advance to ready from status: {case['status']}")
+            raise gl.vm.UserError(f"Cannot advance to ready from status: {case['status']}")
 
         case["status"] = "ready_for_resolution"
         self.cases[case_id] = json.dumps(case)
@@ -235,11 +235,11 @@ class MandorlaSharedDecision(gl.Contract):
         case = _load_case(self, case_id)
 
         if case["status"] != "ready_for_resolution":
-            raise gl.UserError(f"Case is not ready for resolution (status: {case['status']})")
+            raise gl.vm.UserError(f"Case is not ready for resolution (status: {case['status']})")
 
-        caller = str(gl.message.sender)
+        caller = str(gl.message.sender_address)
         if caller != case["creator"] and caller != case["respondent"]:
-            raise gl.UserError("Only case parties can request resolution")
+            raise gl.vm.UserError("Only case parties can request resolution")
 
         # ── Load all evidence into local memory before the nondet block ──────
         # (reading storage directly inside nondet is not yet supported)
@@ -296,14 +296,14 @@ class MandorlaSharedDecision(gl.Contract):
         the actual token transfer based on the result's bps split.
         """
         case = _load_case(self, case_id)
-        caller = str(gl.message.sender)
+        caller = str(gl.message.sender_address)
 
         if caller != case["creator"] and caller != case["respondent"]:
-            raise gl.UserError("Only case parties can settle")
+            raise gl.vm.UserError("Only case parties can settle")
         if case["status"] != "resolved":
-            raise gl.UserError(f"Case must be resolved before settling (status: {case['status']})")
+            raise gl.vm.UserError(f"Case must be resolved before settling (status: {case['status']})")
         if not self.final_results.get(case_id, ""):
-            raise gl.UserError("No final result found for this case")
+            raise gl.vm.UserError("No final result found for this case")
 
         case["status"] = "settled"
         self.cases[case_id] = json.dumps(case)
@@ -316,7 +316,7 @@ class MandorlaSharedDecision(gl.Contract):
         """Returns the full case record as a JSON string."""
         result = self.cases.get(case_id, "")
         if not result:
-            raise gl.UserError(f"Case {case_id} not found")
+            raise gl.vm.UserError(f"Case {case_id} not found")
         return result
 
     @gl.public.view
@@ -335,7 +335,7 @@ class MandorlaSharedDecision(gl.Contract):
         """Returns the canonical final result JSON string."""
         result = self.final_results.get(case_id, "")
         if not result:
-            raise gl.UserError(f"No final result for case {case_id}")
+            raise gl.vm.UserError(f"No final result for case {case_id}")
         return result
 
     @gl.public.view
@@ -343,7 +343,7 @@ class MandorlaSharedDecision(gl.Contract):
         """Returns the current status string for a case."""
         status = self.case_statuses.get(case_id, "")
         if not status:
-            raise gl.UserError(f"Case {case_id} not found")
+            raise gl.vm.UserError(f"Case {case_id} not found")
         return status
 
     @gl.public.view
@@ -357,7 +357,7 @@ class MandorlaSharedDecision(gl.Contract):
 def _load_case(contract: MandorlaSharedDecision, case_id: u32) -> dict:
     case_json = contract.cases.get(case_id, "")
     if not case_json:
-        raise gl.UserError(f"Case {case_id} not found")
+        raise gl.vm.UserError(f"Case {case_id} not found")
     return json.loads(case_json)
 
 
@@ -442,23 +442,23 @@ Rules:
 def _parse_and_validate_result(raw: any, case: dict) -> dict:
     """
     Called on the leader node. Parses, cleans, and validates the LLM response.
-    Raises gl.UserError to force leader rotation if the response is unusable.
+    Raises gl.vm.UserError to force leader rotation if the response is unusable.
     """
     if isinstance(raw, str):
         first = raw.find("{")
         last = raw.rfind("}")
         if first == -1 or last == -1:
-            raise gl.UserError("LLM returned no JSON object in response")
+            raise gl.vm.UserError("LLM returned no JSON object in response")
         raw = raw[first:last + 1]
         # Remove trailing commas before ] or } (common LLM mistake)
         raw = re.sub(r",\s*([}\]])", r"\1", raw)
         try:
             raw = json.loads(raw)
         except Exception as e:
-            raise gl.UserError(f"LLM JSON parse failed: {e}")
+            raise gl.vm.UserError(f"LLM JSON parse failed: {e}")
 
     if not isinstance(raw, dict):
-        raise gl.UserError(f"LLM returned non-dict type: {type(raw)}")
+        raise gl.vm.UserError(f"LLM returned non-dict type: {type(raw)}")
 
     required_keys = [
         "outcome_type", "claimant_share_bps", "respondent_share_bps",
@@ -468,12 +468,12 @@ def _parse_and_validate_result(raw: any, case: dict) -> dict:
     ]
     for key in required_keys:
         if key not in raw:
-            raise gl.UserError(f"LLM result missing required key: {key}")
+            raise gl.vm.UserError(f"LLM result missing required key: {key}")
 
     if raw["outcome_type"] not in VALID_OUTCOME_TYPES:
-        raise gl.UserError(f"Invalid outcome_type: {raw['outcome_type']}")
+        raise gl.vm.UserError(f"Invalid outcome_type: {raw['outcome_type']}")
     if raw["evidence_strength"] not in VALID_EVIDENCE_STRENGTHS:
-        raise gl.UserError(f"Invalid evidence_strength: {raw['evidence_strength']}")
+        raise gl.vm.UserError(f"Invalid evidence_strength: {raw['evidence_strength']}")
 
     # Coerce bps values to int
     for bps_key in ("claimant_share_bps", "respondent_share_bps",
@@ -482,21 +482,21 @@ def _parse_and_validate_result(raw: any, case: dict) -> dict:
         try:
             raw[bps_key] = int(raw[bps_key])
         except (TypeError, ValueError):
-            raise gl.UserError(f"Non-integer bps value for {bps_key}: {raw[bps_key]}")
+            raise gl.vm.UserError(f"Non-integer bps value for {bps_key}: {raw[bps_key]}")
 
     if raw["outcome_type"] not in OPEN_SUM_OUTCOMES:
         total = raw["claimant_share_bps"] + raw["respondent_share_bps"]
         if total != 10000:
-            raise gl.UserError(f"Payout bps must sum to 10000, got {total}")
+            raise gl.vm.UserError(f"Payout bps must sum to 10000, got {total}")
 
     if not isinstance(raw["conditions"], list):
         raw["conditions"] = []
     if not isinstance(raw["uncertainties"], list):
         raw["uncertainties"] = []
     if not isinstance(raw["middle_reason"], str) or not raw["middle_reason"].strip():
-        raise gl.UserError("middle_reason cannot be empty")
+        raise gl.vm.UserError("middle_reason cannot be empty")
     if not isinstance(raw["settlement_instruction"], str) or not raw["settlement_instruction"].strip():
-        raise gl.UserError("settlement_instruction cannot be empty")
+        raise gl.vm.UserError("settlement_instruction cannot be empty")
 
     # Return only the canonical fields — strip any extra keys the LLM added
     return {k: raw[k] for k in required_keys}

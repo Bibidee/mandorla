@@ -3,7 +3,7 @@
  *
  * Install: npm install genlayer-js
  * Set CONTRACT_ADDRESS in your .env.local:
- *   NEXT_PUBLIC_CONTRACT_ADDRESS=0xfB8cecc8B11f7Fc8CE899B0bcAA183dEaC9390FB
+ *   NEXT_PUBLIC_CONTRACT_ADDRESS=0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19
  *   NEXT_PUBLIC_GENLAYER_RPC=https://studio.genlayer.com/api
  */
 
