@@ -3,6 +3,82 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+
+async function submitCreateCase(form: Record<string, any>): Promise<number> {
+  const eth = (window as any).ethereum;
+  if (!eth) throw new Error("No wallet found. Install MetaMask or Rabby.");
+
+  const accounts: string[] = await eth.request({ method: "eth_accounts" });
+  if (!accounts[0]) throw new Error("Wallet not connected. Click 'Connect Wallet' first.");
+
+  if (!form.case_title.trim()) throw new Error("Case title is required.");
+  if (form.claimant_position.trim().length < 10) throw new Error("Claimant position must be at least 10 characters.");
+  if (!form.agreement_summary.trim()) throw new Error("Agreement summary is required.");
+  if (!form.evidence_deadline || !form.resolution_deadline) throw new Error("Both deadlines are required.");
+
+  const evidenceDeadline = Math.floor(new Date(form.evidence_deadline).getTime() / 1000);
+  const resolutionDeadline = Math.floor(new Date(form.resolution_deadline).getTime() / 1000);
+  if (evidenceDeadline >= resolutionDeadline) throw new Error("Resolution deadline must be after evidence deadline.");
+
+  const walletAddress = accounts[0] as `0x${string}`;
+
+  const { createClient } = await import("genlayer-js");
+  const { studionet } = await import("genlayer-js/chains");
+  const { TransactionStatus } = await import("genlayer-js/types");
+
+  // JSON-RPC account: no private key — genlayer-js will call eth_sendTransaction
+  // through the transport. We intercept that call and redirect it to MetaMask.
+  const jsonRpcAccount = { address: walletAddress, type: "json-rpc" as const };
+  const client: any = createClient({ chain: studionet, account: jsonRpcAccount as any });
+
+  // Redirect eth_sendTransaction to the injected wallet so MetaMask/Rabby signs it.
+  const originalRequest = client.request.bind(client);
+  client.request = async (args: any) => {
+    if (args.method === "eth_sendTransaction") {
+      return eth.request(args);
+    }
+    return originalRequest(args);
+  };
+
+  const hash: any = await client.writeContract({
+    address: CONTRACT,
+    functionName: "create_case",
+    args: [
+      form.case_title.trim(),
+      form.case_type,
+      form.respondent.trim(),
+      form.agreement_summary.trim(),
+      form.claimant_position.trim(),
+      form.requested_outcome.trim(),
+      Number(form.amount_at_stake) || 0,
+      form.asset_symbol,
+      evidenceDeadline,
+      resolutionDeadline,
+    ],
+  });
+
+  const receipt: any = await client.waitForTransactionReceipt({
+    hash,
+    status: TransactionStatus.FINALIZED,
+    retries: 60,
+    interval: 4000,
+  });
+
+  const exec = receipt.consensus_data?.leader_receipt?.[0]?.execution_result;
+  if (exec !== "SUCCESS") {
+    const stderr = receipt.consensus_data?.leader_receipt?.[0]?.genvm_result?.stderr ?? "";
+    throw new Error(`Transaction failed: ${exec}\n${stderr}`);
+  }
+
+  const count: any = await client.readContract({
+    address: CONTRACT,
+    functionName: "get_case_count",
+    args: [],
+  });
+  return Number(count);
+}
+
 const STEPS = [
   { num: 1, label: "Case Frame" },
   { num: 2, label: "The Agreement" },
@@ -14,6 +90,8 @@ const STEPS = [
 
 export default function NewCasePage() {
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const [form, setForm] = useState({
@@ -72,6 +150,18 @@ export default function NewCasePage() {
         ))}
       </div>
 
+      {error && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-faultrose/10 border border-faultrose/30 text-faultrose text-sm">
+          {error}
+        </div>
+      )}
+
+      {submitting && (
+        <div className="mb-4 px-4 py-3 rounded-lg bg-gold/10 border border-gold/30 text-gold text-sm">
+          Waiting for wallet confirmation and on-chain finalization. This can take 30–60 seconds…
+        </div>
+      )}
+
       {/* Step content */}
       <div className="panel p-6 md:p-8">
         {step === 1 && <StepCaseFrame form={form} update={update} />}
@@ -101,10 +191,22 @@ export default function NewCasePage() {
             </button>
           ) : (
             <button
-              onClick={() => router.push("/cases/1")}
-              className="px-6 py-2 rounded-lg bg-gold text-inkbrown text-sm font-semibold hover:bg-apricot transition-colors gold-glow-sm"
+              disabled={submitting}
+              onClick={async () => {
+                setError(null);
+                setSubmitting(true);
+                try {
+                  const caseId = await submitCreateCase(form);
+                  router.push(`/cases/${caseId}`);
+                } catch (e: any) {
+                  setError(e.message ?? "Something went wrong.");
+                } finally {
+                  setSubmitting(false);
+                }
+              }}
+              className="px-6 py-2 rounded-lg bg-gold text-inkbrown text-sm font-semibold hover:bg-apricot transition-colors gold-glow-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Create Case
+              {submitting ? "Creating…" : "Create Case"}
             </button>
           )}
         </div>
