@@ -41,7 +41,7 @@ async function submitCreateCase(form: Record<string, any>): Promise<number> {
       form.asset_symbol,
       evidenceDeadline,
       resolutionDeadline,
-    ])
+    ], undefined)
   );
   const txData = glAbi.transactions.serialize([calldata, false]);
 
