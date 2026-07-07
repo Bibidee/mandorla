@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { clsx } from "clsx";
+import { ConnectWallet } from "./ConnectWallet";
 
 const NAV = [
   { href: "/cases", label: "Observatory" },
@@ -39,12 +40,15 @@ export function MandorlaShell({ children }: { children: React.ReactNode }) {
               </Link>
             ))}
           </nav>
-          <Link
-            href="/cases/new"
-            className="px-4 py-2 rounded-lg bg-gold text-inkbrown text-sm font-medium hover:bg-apricot transition-colors"
-          >
-            Open a Case
-          </Link>
+          <div className="flex items-center gap-3">
+            <ConnectWallet />
+            <Link
+              href="/cases/new"
+              className="px-4 py-2 rounded-lg bg-gold text-inkbrown text-sm font-medium hover:bg-apricot transition-colors"
+            >
+              Open a Case
+            </Link>
+          </div>
         </div>
       </header>
       <main className="flex-1">{children}</main>
