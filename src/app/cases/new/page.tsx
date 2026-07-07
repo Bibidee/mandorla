@@ -23,28 +23,14 @@ async function submitCreateCase(form: Record<string, any>): Promise<number> {
 
   const walletAddress = accounts[0] as `0x${string}`;
 
-  const { createClient } = await import("genlayer-js");
+  const { abi: glAbi, createClient, createAccount } = await import("genlayer-js");
   const { studionet } = await import("genlayer-js/chains");
   const { TransactionStatus } = await import("genlayer-js/types");
+  const { encodeFunctionData } = await import("viem");
 
-  // JSON-RPC account: no private key — genlayer-js will call eth_sendTransaction
-  // through the transport. We intercept that call and redirect it to MetaMask.
-  const jsonRpcAccount = { address: walletAddress, type: "json-rpc" as const };
-  const client: any = createClient({ chain: studionet, account: jsonRpcAccount as any });
-
-  // Redirect eth_sendTransaction to the injected wallet so MetaMask/Rabby signs it.
-  const originalRequest = client.request.bind(client);
-  client.request = async (args: any) => {
-    if (args.method === "eth_sendTransaction") {
-      return eth.request(args);
-    }
-    return originalRequest(args);
-  };
-
-  const hash: any = await client.writeContract({
-    address: CONTRACT,
-    functionName: "create_case",
-    args: [
+  // 1. Encode GenLayer calldata using the SDK's exported functions
+  const calldata = glAbi.calldata.encode(
+    glAbi.calldata.makeCalldataObject("create_case", [
       form.case_title.trim(),
       form.case_type,
       form.respondent.trim(),
@@ -55,11 +41,35 @@ async function submitCreateCase(form: Record<string, any>): Promise<number> {
       form.asset_symbol,
       evidenceDeadline,
       resolutionDeadline,
+    ])
+  );
+  const txData = glAbi.transactions.serialize([calldata, false]);
+
+  // 2. Wrap in addTransaction ABI call to the consensus contract
+  const consensusAddr = studionet.consensusMainContract!.address as `0x${string}`;
+  const consensusAbi = studionet.consensusMainContract!.abi;
+  const encodedData = encodeFunctionData({
+    abi: consensusAbi,
+    functionName: "addTransaction",
+    args: [
+      walletAddress,
+      CONTRACT as `0x${string}`,
+      BigInt(studionet.defaultNumberOfInitialValidators),
+      BigInt(studionet.defaultConsensusMaxRotations),
+      txData as `0x${string}`,
     ],
   });
 
-  const receipt: any = await client.waitForTransactionReceipt({
-    hash,
+  // 3. Send via injected wallet — MetaMask/Rabby pops up for signing
+  const evmTxHash: `0x${string}` = await eth.request({
+    method: "eth_sendTransaction",
+    params: [{ from: walletAddress, to: consensusAddr, data: encodedData }],
+  });
+
+  // 4. Wait for GenLayer finalization using a read-only client
+  const readClient: any = createClient({ chain: studionet, account: createAccount() });
+  const receipt: any = await readClient.waitForTransactionReceipt({
+    hash: evmTxHash,
     status: TransactionStatus.FINALIZED,
     retries: 60,
     interval: 4000,
@@ -71,7 +81,7 @@ async function submitCreateCase(form: Record<string, any>): Promise<number> {
     throw new Error(`Transaction failed: ${exec}\n${stderr}`);
   }
 
-  const count: any = await client.readContract({
+  const count: any = await readClient.readContract({
     address: CONTRACT,
     functionName: "get_case_count",
     args: [],
