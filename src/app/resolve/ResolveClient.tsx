@@ -9,12 +9,57 @@ export function ResolveClient({ ready }: { ready: Case[] }) {
   const [resolving, setResolving] = useState<number | null>(null);
   const [resolved, setResolved] = useState<number[]>([]);
 
-  function handleResolve(caseId: number) {
+  async function handleResolve(caseId: number) {
+    const eth = (window as any).ethereum;
+    if (!eth) { alert("No wallet found. Install MetaMask or Rabby."); return; }
+    const accounts: string[] = await eth.request({ method: "eth_accounts" });
+    if (!accounts[0]) { alert("Connect your wallet first."); return; }
+
     setResolving(caseId);
-    setTimeout(() => {
-      setResolving(null);
+    try {
+      const walletAddress = accounts[0] as `0x${string}`;
+      const { abi: glAbi, createClient, createAccount } = await import("genlayer-js");
+      const { studionet } = await import("genlayer-js/chains");
+      const { TransactionStatus } = await import("genlayer-js/types");
+      const { encodeFunctionData } = await import("viem");
+
+      const calldata = glAbi.calldata.encode(
+        glAbi.calldata.makeCalldataObject("request_resolution", [caseId], undefined)
+      );
+      const txData = glAbi.transactions.serialize([calldata, false]);
+      const consensusAddr = studionet.consensusMainContract!.address as `0x${string}`;
+      const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+      const encodedData = encodeFunctionData({
+        abi: studionet.consensusMainContract!.abi,
+        functionName: "addTransaction",
+        args: [
+          walletAddress,
+          CONTRACT as `0x${string}`,
+          BigInt(studionet.defaultNumberOfInitialValidators),
+          BigInt(studionet.defaultConsensusMaxRotations),
+          txData as `0x${string}`,
+        ],
+      });
+
+      const evmTxHash: `0x${string}` = await eth.request({
+        method: "eth_sendTransaction",
+        params: [{ from: walletAddress, to: consensusAddr, data: encodedData }],
+      });
+
+      const readClient: any = createClient({ chain: studionet, account: createAccount() });
+      await readClient.waitForTransactionReceipt({
+        hash: evmTxHash,
+        status: TransactionStatus.FINALIZED,
+        retries: 100,
+        interval: 5000,
+      });
+
       setResolved((r) => [...r, caseId]);
-    }, 4000);
+    } catch (e: any) {
+      alert(e.message ?? "Resolution failed.");
+    } finally {
+      setResolving(null);
+    }
   }
 
   if (ready.length === 0) {
