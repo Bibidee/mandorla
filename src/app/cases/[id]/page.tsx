@@ -5,6 +5,7 @@ import { getCaseWithEvidence } from "@/lib/contractData";
 import { OverlapField } from "@/components/OverlapField";
 import { EvidenceTile } from "@/components/EvidenceTile";
 import { MiddleOutcomeCard } from "@/components/MiddleOutcomeCard";
+import { EvidenceForm } from "@/components/EvidenceForm";
 
 export const revalidate = 15;
 
@@ -199,51 +200,3 @@ function StatusChip({ status }: { status: string }) {
   );
 }
 
-function EvidenceForm({ caseId }: { caseId: number }) {
-  void caseId;
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-parchment/50 font-mono">Title</label>
-        <input className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20" placeholder="Evidence title" />
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-parchment/50 font-mono">Type</label>
-        <select className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50">
-          <option value="agreement">Agreement</option>
-          <option value="message_thread">Message Thread</option>
-          <option value="work_output">Work Output</option>
-          <option value="payment_record">Payment Record</option>
-          <option value="screenshot">Screenshot</option>
-          <option value="public_url">Public URL</option>
-          <option value="expert_note">Expert Note</option>
-        </select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-parchment/50 font-mono">Side</label>
-        <select className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50">
-          <option value="claimant">Claimant</option>
-          <option value="respondent">Respondent</option>
-          <option value="neutral">Neutral</option>
-        </select>
-      </div>
-      <div className="flex flex-col gap-1">
-        <label className="text-xs text-parchment/50 font-mono">URL (optional)</label>
-        <input className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20" placeholder="https://..." />
-      </div>
-      <div className="flex flex-col gap-1 md:col-span-2">
-        <label className="text-xs text-parchment/50 font-mono">Summary</label>
-        <textarea className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20 resize-none h-20" placeholder="What does this evidence show?" />
-      </div>
-      <div className="flex flex-col gap-1 md:col-span-2">
-        <label className="text-xs text-parchment/50 font-mono">Why it matters</label>
-        <input className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20" placeholder="Why should validators weight this evidence?" />
-      </div>
-      <div className="md:col-span-2">
-        <button className="px-6 py-2.5 rounded-lg bg-gold text-inkbrown text-sm font-semibold hover:bg-apricot transition-colors">
-          Submit Evidence
-        </button>
-      </div>
-    </div>
-  );
-}
