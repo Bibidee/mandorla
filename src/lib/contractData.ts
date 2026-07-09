@@ -37,10 +37,18 @@ export async function getCaseCount(): Promise<number> {
   }
 }
 
+function fixCaseDates(c: any) {
+  // Contract stores unix seconds; JS Date expects milliseconds
+  if (typeof c.created_at === "number") c.created_at = new Date(c.created_at * 1000).toISOString();
+  if (typeof c.evidence_deadline === "number") c.evidence_deadline = new Date(c.evidence_deadline * 1000).toISOString();
+  if (typeof c.resolution_deadline === "number") c.resolution_deadline = new Date(c.resolution_deadline * 1000).toISOString();
+  return c;
+}
+
 export async function getCaseById(caseId: number): Promise<Case | null> {
   try {
     const raw = await genCall("get_case", [caseId]);
-    const c = JSON.parse(raw);
+    const c = fixCaseDates(JSON.parse(raw));
     if (c.final_result_json) {
       c.final_result = JSON.parse(c.final_result_json);
       delete c.final_result_json;

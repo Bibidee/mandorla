@@ -6,6 +6,7 @@ import { OverlapField } from "@/components/OverlapField";
 import { EvidenceTile } from "@/components/EvidenceTile";
 import { MiddleOutcomeCard } from "@/components/MiddleOutcomeCard";
 import { EvidenceForm } from "@/components/EvidenceForm";
+import { RespondButton, AdvanceToReadyButton } from "@/components/CaseActions";
 
 export const revalidate = 15;
 
@@ -58,6 +59,26 @@ export default async function CaseDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {c.status === "open" && (
+        <div className="mb-8 p-4 rounded-xl border border-lavender/20 bg-lavender/5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-lavender font-medium text-sm">Waiting for the respondent to reply.</p>
+            <p className="text-parchment/50 text-xs mt-0.5">The respondent should add their position before evidence is submitted.</p>
+          </div>
+          <RespondButton caseId={c.case_id} />
+        </div>
+      )}
+
+      {(c.status === "responded" || c.status === "evidence_open") && (
+        <div className="mb-8 p-4 rounded-xl border border-apricot/20 bg-apricot/5 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-apricot font-medium text-sm">Both sides have responded. Submit evidence or mark ready.</p>
+            <p className="text-parchment/50 text-xs mt-0.5">Either party can advance to resolution once evidence is complete.</p>
+          </div>
+          <AdvanceToReadyButton caseId={c.case_id} />
+        </div>
+      )}
+
       {isReady && (
         <div className="mb-8 p-4 rounded-xl border border-gold/30 bg-gold/5 flex items-center justify-between gap-4">
           <div>
@@ -65,7 +86,7 @@ export default async function CaseDetailPage({ params }: Props) {
             <p className="text-parchment/50 text-xs mt-0.5">This case is ready for proportional resolution.</p>
           </div>
           <Link href="/resolve" className="px-4 py-2 rounded-lg bg-gold text-inkbrown text-sm font-semibold hover:bg-apricot transition-colors whitespace-nowrap">
-            Ask GenLayer
+            Ask GenLayer →
           </Link>
         </div>
       )}
