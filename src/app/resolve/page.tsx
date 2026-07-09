@@ -1,7 +1,7 @@
 import { getAllCases } from "@/lib/contractData";
 import { ResolveClient } from "./ResolveClient";
 
-export const revalidate = 20;
+export const revalidate = 10;
 
 export default async function ResolvePage() {
   const all = await getAllCases();
