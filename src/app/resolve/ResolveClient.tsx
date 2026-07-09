@@ -46,7 +46,6 @@ export function ResolveClient({ ready }: { ready: Case[] }) {
         params: [{ from: walletAddress, to: consensusAddr, data: encodedData }],
       });
 
-      const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
       const readClient: any = createClient({ chain: studionet, account: createAccount() });
 
       // Poll get_case_status directly — stops as soon as verdict is written,
