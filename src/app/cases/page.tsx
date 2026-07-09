@@ -2,7 +2,7 @@ import Link from "next/link";
 import { CaseCard } from "@/components/CaseCard";
 import { getAllCases } from "@/lib/contractData";
 
-export const revalidate = 30; // recheck every 30s
+export const dynamic = "force-dynamic";
 
 export default async function CasesPage() {
   const cases = await getAllCases();
