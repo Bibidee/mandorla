@@ -46,13 +46,24 @@ export function ResolveClient({ ready }: { ready: Case[] }) {
         params: [{ from: walletAddress, to: consensusAddr, data: encodedData }],
       });
 
+      const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
       const readClient: any = createClient({ chain: studionet, account: createAccount() });
-      await readClient.waitForTransactionReceipt({
-        hash: evmTxHash,
-        status: TransactionStatus.FINALIZED,
-        retries: 100,
-        interval: 5000,
-      });
+
+      // Poll get_case_status directly — stops as soon as verdict is written,
+      // which happens before FINALIZED receipt status on Studionet.
+      let attempts = 0;
+      while (attempts < 120) {
+        await new Promise((r) => setTimeout(r, 5000));
+        try {
+          const status = await readClient.readContract({
+            address: CONTRACT,
+            functionName: "get_case_status",
+            args: [caseId],
+          });
+          if (status === "resolved" || status === "settled") break;
+        } catch { /* keep polling */ }
+        attempts++;
+      }
 
       setResolved((r) => [...r, caseId]);
     } catch (e: any) {
