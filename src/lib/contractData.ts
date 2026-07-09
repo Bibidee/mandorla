@@ -12,20 +12,39 @@ const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf
 // Read-only caller — any address works for view calls
 const READER = "0x0C9479670628D38E72754C3cc5aB8C56C8EbB0E9";
 
-async function genCall(functionName: string, args: unknown[] = []): Promise<string> {
+async function genCall(functionName: string, args: unknown[] = [], retries = 3): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { createClient, createAccount } = await import("genlayer-js") as any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { studionet } = await import("genlayer-js/chains") as any;
   const account = createAccount();
   const client = createClient({ chain: studionet, account });
-  const result: string = await client.readContract({
-    address: CONTRACT,
-    functionName,
-    args,
-    account: READER,
-  });
-  return result;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      const result: string = await client.readContract({
+        address: CONTRACT,
+        functionName,
+        args,
+        account: READER,
+      });
+      return result;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries - 1) await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
+    }
+  }
+  throw lastErr;
+}
+
+async function batchedMap<T>(ids: number[], fn: (id: number) => Promise<T>, concurrency = 5): Promise<T[]> {
+  const results: T[] = [];
+  for (let i = 0; i < ids.length; i += concurrency) {
+    const chunk = ids.slice(i, i + concurrency);
+    const batch = await Promise.all(chunk.map(fn));
+    results.push(...batch);
+  }
+  return results;
 }
 
 export async function getCaseCount(): Promise<number> {
@@ -81,7 +100,7 @@ export async function getAllCases(): Promise<Case[]> {
   const count = await getCaseCount();
   if (count === 0) return [];
   const ids = Array.from({ length: count }, (_, i) => i + 1);
-  const cases = await Promise.all(ids.map(getCaseById));
+  const cases = await batchedMap(ids, getCaseById, 5);
   return cases.filter(Boolean) as Case[];
 }
 
