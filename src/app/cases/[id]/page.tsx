@@ -8,7 +8,7 @@ import { MiddleOutcomeCard } from "@/components/MiddleOutcomeCard";
 import { EvidenceForm } from "@/components/EvidenceForm";
 import { RespondButton, AdvanceToReadyButton } from "@/components/CaseActions";
 
-export const revalidate = 15;
+export const dynamic = "force-dynamic";
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -53,9 +53,11 @@ export default async function CaseDetailPage({ params }: Props) {
               <p className="text-xs text-parchment/40">at stake</p>
             </div>
           )}
-          <p className="font-mono text-xs text-parchment/30">
-            Created {new Date(c.created_at).toLocaleDateString()}
-          </p>
+          {c.created_at && !isNaN(new Date(c.created_at).getTime()) && (
+            <p className="font-mono text-xs text-parchment/30">
+              Created {new Date(c.created_at).toLocaleDateString()}
+            </p>
+          )}
         </div>
       </div>
 
