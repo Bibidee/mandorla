@@ -1,6 +1,6 @@
 # Mandorla Contract
 
-`MandorlaSharedDecision` — GenLayer Intelligent Contract for proportional dispute resolution.
+`MandorlaSharedDecision`: GenLayer Intelligent Contract for proportional dispute resolution.
 
 ## Setup
 
@@ -27,7 +27,7 @@ pytest tests/test_mandorla.py -v
 ## Deploy
 
 ```bash
-# Studionet (default) — https://studio.genlayer.com  Chain ID 61999
+# Studionet (default): https://studio.genlayer.com  Chain ID 61999
 npx ts-node deploy.ts
 
 # Local dev
