@@ -13,7 +13,7 @@ Every case lives on-chain as a GenLayer Intelligent Contract (`MandorlaSharedDec
 3. **Submit evidence**: either side (or a neutral party) attaches evidence tiles: documents, message threads, timelines, expert notes.
 4. **Advance to ready**: once the record is complete, either party marks the case ready.
 5. **Request resolution**: GenLayer validators weigh both truths and the evidence to compute a proportional middle outcome.
-6. **Settlement**: the final result includes a payout split, responsibility split, confidence score, and reasoning.
+6. **Settlement**: parties fund GEN escrow before resolution; the final source-backed split is released by the contract, while no-evidence/manual outcomes remain non-executable.
 
 ## Stack
 

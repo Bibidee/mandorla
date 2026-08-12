@@ -17,7 +17,7 @@ import { createClient, createAccount } from "genlayer-js";
 import { studionet } from "genlayer-js/chains";
 import { TransactionStatus } from "genlayer-js/types";
 
-const CONTRACT = process.env.GENLAYER_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+const CONTRACT = process.env.GENLAYER_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
 
 const CLAIMANT_KEY = (process.env.GENLAYER_PRIVATE_KEY ?? "") as `0x${string}`;
 const RESPONDENT_KEY = (process.env.GENLAYER_RESPONDENT_KEY ?? "") as `0x${string}`;

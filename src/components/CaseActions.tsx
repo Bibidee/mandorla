@@ -2,9 +2,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
 
-async function sendTx(functionName: string, args: any[]) {
+async function sendTx(functionName: string, args: any[], value?: bigint) {
   const eth = (window as any).ethereum;
   if (!eth) throw new Error("No wallet found. Install MetaMask or Rabby.");
   const accounts: string[] = await eth.request({ method: "eth_accounts" });
@@ -35,7 +35,7 @@ async function sendTx(functionName: string, args: any[]) {
 
   const evmTxHash: `0x${string}` = await eth.request({
     method: "eth_sendTransaction",
-    params: [{ from: walletAddress, to: consensusAddr, data: encodedData }],
+        params: [{ from: walletAddress, to: consensusAddr, data: encodedData, ...(value ? { value: `0x${value.toString(16)}` } : {}) }],
   });
 
   const readClient: any = createClient({ chain: studionet, account: createAccount() });
@@ -147,4 +147,39 @@ export function AdvanceToReadyButton({ caseId }: { caseId: number }) {
       </button>
     </div>
   );
+}
+
+// ── GEN escrow ───────────────────────────────────────────────────────────────
+
+export function FundCaseButton({ caseId }: { caseId: number }) {
+  const [amount, setAmount] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  async function fund() {
+    const normalized = amount.trim();
+    if (!/^\d+(\.\d{1,18})?$/.test(normalized) || Number(normalized) <= 0) {
+      setError("Enter a positive GEN amount (up to 18 decimal places)."); return;
+    }
+    const [whole, fraction = ""] = normalized.split(".");
+    const wei = BigInt(whole) * BigInt(10) ** BigInt(18) + BigInt((fraction + "0".repeat(18)).slice(0, 18));
+    setError(null); setSubmitting(true);
+    try {
+      await sendTx("fund_case", [caseId], wei);
+      setAmount(""); router.refresh();
+    } catch (e: any) {
+      setError(e.message ?? "Something went wrong.");
+    } finally { setSubmitting(false); }
+  }
+
+  return <div className="flex flex-col gap-2">
+    {error && <p className="text-faultrose text-sm">{error}</p>}
+    <div className="flex gap-2">
+      <input value={amount} onChange={e => setAmount(e.target.value)} inputMode="decimal" placeholder="GEN to escrow" className="bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment w-40" />
+      <button onClick={fund} disabled={submitting} className="px-5 py-2.5 rounded-lg bg-gold text-inkbrown text-sm font-semibold disabled:opacity-60">
+        {submitting ? "Funding…" : "Fund GEN Escrow"}
+      </button>
+    </div>
+  </div>;
 }

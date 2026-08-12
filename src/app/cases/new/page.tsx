@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { clsx } from "clsx";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
 
 async function submitCreateCase(form: Record<string, any>): Promise<number> {
   const eth = (window as any).ethereum;

@@ -66,7 +66,7 @@ def submit_ev(contract, vm, case_id, sender=CLAIMANT, side="claimant"):
         vm.sender = sender
         return contract.submit_evidence(
             case_id, side, "work_output", "Figma Design File",
-            "Complete design showing all screens", "", "", "Proves substantial delivery",
+            "Complete design showing all screens", "https://example.com/evidence.pdf", "0" * 64, "Proves substantial delivery",
         )
 
 

@@ -28,7 +28,7 @@ export function ResolveClient({ ready }: { ready: Case[] }) {
       );
       const txData = glAbi.transactions.serialize([calldata, false]);
       const consensusAddr = studionet.consensusMainContract!.address as `0x${string}`;
-      const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+      const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
       const encodedData = encodeFunctionData({
         abi: studionet.consensusMainContract!.abi,
         functionName: "addTransaction",

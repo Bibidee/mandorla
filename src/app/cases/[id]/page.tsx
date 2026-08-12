@@ -6,7 +6,7 @@ import { OverlapField } from "@/components/OverlapField";
 import { EvidenceTile } from "@/components/EvidenceTile";
 import { MiddleOutcomeCard } from "@/components/MiddleOutcomeCard";
 import { EvidenceForm } from "@/components/EvidenceForm";
-import { RespondButton, AdvanceToReadyButton } from "@/components/CaseActions";
+import { RespondButton, AdvanceToReadyButton, FundCaseButton } from "@/components/CaseActions";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +77,7 @@ export default async function CaseDetailPage({ params }: Props) {
             <p className="text-apricot font-medium text-sm">Both sides have responded. Submit evidence or mark ready.</p>
             <p className="text-parchment/50 text-xs mt-0.5">Either party can advance to resolution once evidence is complete.</p>
           </div>
+          <FundCaseButton caseId={c.case_id} />
           <AdvanceToReadyButton caseId={c.case_id} />
         </div>
       )}
@@ -222,4 +223,3 @@ function StatusChip({ status }: { status: string }) {
     </span>
   );
 }
-

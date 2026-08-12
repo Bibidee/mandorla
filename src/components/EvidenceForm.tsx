@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x7e01d89d0DE540bf3742af8Fc2Fe538fb8661C19";
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
 
 const inputCls =
   "bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20 w-full";
@@ -12,6 +12,7 @@ export function EvidenceForm({ caseId }: { caseId: number }) {
     evidence_type: "agreement",
     side: "claimant",
     url: "",
+    content_hash: "",
     summary: "",
     weight_hint: "",
   });
@@ -31,6 +32,8 @@ export function EvidenceForm({ caseId }: { caseId: number }) {
     if (!accounts[0]) { setError("Wallet not connected. Click 'Connect Wallet' first."); return; }
     if (!form.title.trim()) { setError("Title is required."); return; }
     if (!form.summary.trim()) { setError("Summary is required."); return; }
+    if (!form.url.startsWith("https://")) { setError("An HTTPS source URL is required."); return; }
+    if (!/^[0-9a-fA-F]{64}$/.test(form.content_hash)) { setError("Enter the source file's SHA-256 hash (64 hex characters)."); return; }
 
     setSubmitting(true);
     try {
@@ -48,7 +51,7 @@ export function EvidenceForm({ caseId }: { caseId: number }) {
           form.title.trim(),
           form.summary.trim(),
           form.url.trim(),
-          "",
+          form.content_hash.trim().toLowerCase(),
           form.weight_hint.trim(),
         ], undefined)
       );
@@ -87,7 +90,7 @@ export function EvidenceForm({ caseId }: { caseId: number }) {
       }
 
       setSuccess(true);
-      setForm({ title: "", evidence_type: "agreement", side: "claimant", url: "", summary: "", weight_hint: "" });
+      setForm({ title: "", evidence_type: "agreement", side: "claimant", url: "", content_hash: "", summary: "", weight_hint: "" });
     } catch (e: any) {
       setError(e.message ?? "Something went wrong.");
     } finally {
@@ -138,12 +141,15 @@ export function EvidenceForm({ caseId }: { caseId: number }) {
           <select className={inputCls} value={form.side} onChange={(e) => update("side", e.target.value)}>
             <option value="claimant">Claimant</option>
             <option value="respondent">Respondent</option>
-            <option value="neutral">Neutral</option>
           </select>
         </div>
         <div className="flex flex-col gap-1">
-          <label className="text-xs text-parchment/50 font-mono">URL (optional)</label>
-          <input className={inputCls} value={form.url} onChange={(e) => update("url", e.target.value)} placeholder="https://..." />
+          <label className="text-xs text-parchment/50 font-mono">Source URL</label>
+          <input className={inputCls} value={form.url} onChange={(e) => update("url", e.target.value)} placeholder="https://immutable-source.example/file" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-parchment/50 font-mono">Source SHA-256</label>
+          <input className={inputCls} value={form.content_hash} onChange={(e) => update("content_hash", e.target.value)} placeholder="64-character hex digest" />
         </div>
         <div className="flex flex-col gap-1 md:col-span-2">
           <label className="text-xs text-parchment/50 font-mono">Summary</label>

@@ -2,6 +2,7 @@
 from genlayer import *
 import json
 import re
+import hashlib
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -26,6 +27,14 @@ VALID_EVIDENCE_STRENGTHS = {"strong", "moderate", "weak", "conflicting", "insuff
 
 # outcome types where share_bps need not sum to 10000
 OPEN_SUM_OUTCOMES = {"manual_review", "insufficient_evidence", "shared_fault"}
+
+
+@gl.evm.contract_interface
+class _Recipient:
+    class View:
+        pass
+    class Write:
+        pass
 
 
 # ─── Contract ─────────────────────────────────────────────────────────────────
@@ -85,6 +94,8 @@ class MandorlaSharedDecision(gl.Contract):
             raise gl.vm.UserError("Claimant position must be at least 10 characters")
         if not agreement_summary.strip():
             raise gl.vm.UserError("Agreement summary cannot be empty")
+        if asset_symbol != "GEN":
+            raise gl.vm.UserError("Only GEN is supported until an ERC-20 escrow adapter is configured")
         if int(amount_at_stake) < 0:
             raise gl.vm.UserError("Amount at stake cannot be negative")
         if int(evidence_deadline) >= int(resolution_deadline):
@@ -109,7 +120,9 @@ class MandorlaSharedDecision(gl.Contract):
             "evidence_deadline": int(evidence_deadline),
             "resolution_deadline": int(resolution_deadline),
             "status": "open",
-            "locked_amount": 0,
+            # Actual native-token escrow, in wei. amount_at_stake remains the
+            # parties' stated value; payouts are always calculated from escrow.
+            "escrowed_amount_wei": 0,
             "final_result_json": "",
         }
 
@@ -161,7 +174,9 @@ class MandorlaSharedDecision(gl.Contract):
         """
         Adds an evidence tile to a case. Returns the new evidence_id.
         Advances case status to 'evidence_open' if currently 'responded'.
-        weight_hint is informational — validators must assess evidence independently.
+        The submitter attests to a SHA-256 commitment to a source hosted at url.
+        Validators later fetch that source, verify its digest, and reason from the
+        source bytes rather than from this user-supplied summary.
         """
         case = _load_case(self, case_id)
 
@@ -175,6 +190,17 @@ class MandorlaSharedDecision(gl.Contract):
             raise gl.vm.UserError("Evidence title is required")
         if not summary.strip():
             raise gl.vm.UserError("Evidence summary is required")
+        caller = str(gl.message.sender_address)
+        if side == "claimant" and caller != case["creator"]:
+            raise gl.vm.UserError("Only the claimant can submit claimant evidence")
+        if side == "respondent" and caller != case["respondent"]:
+            raise gl.vm.UserError("Only the respondent can submit respondent evidence")
+        if side == "neutral":
+            raise gl.vm.UserError("Neutral evidence requires a trusted attestor and is not enabled")
+        if not url.startswith("https://"):
+            raise gl.vm.UserError("Evidence must include an HTTPS source URL")
+        if not re.fullmatch(r"[0-9a-fA-F]{64}", content_hash or ""):
+            raise gl.vm.UserError("content_hash must be a SHA-256 hex digest")
 
         self.evidence_count = u32(int(self.evidence_count) + 1)
         evidence_id = self.evidence_count
@@ -182,7 +208,7 @@ class MandorlaSharedDecision(gl.Contract):
         evidence_data = {
             "evidence_id": int(evidence_id),
             "case_id": int(case_id),
-            "submitted_by": str(gl.message.sender_address),
+            "submitted_by": caller,
             "side": side,
             "evidence_type": evidence_type,
             "title": title,
@@ -203,6 +229,20 @@ class MandorlaSharedDecision(gl.Contract):
             self.case_statuses[case_id] = "evidence_open"
 
         return evidence_id
+
+    @gl.public.write.payable
+    def fund_case(self, case_id: u32) -> None:
+        """Escrow GEN for this case. The final payout is limited to this balance."""
+        case = _load_case(self, case_id)
+        caller = str(gl.message.sender_address)
+        if caller != case["creator"] and caller != case["respondent"]:
+            raise gl.vm.UserError("Only case parties can fund escrow")
+        if case["status"] in ("resolved", "settled"):
+            raise gl.vm.UserError("Cannot fund escrow after resolution")
+        if int(gl.message.value) <= 0:
+            raise gl.vm.UserError("Escrow funding must include GEN")
+        case["escrowed_amount_wei"] = int(case.get("escrowed_amount_wei", 0)) + int(gl.message.value)
+        self.cases[case_id] = json.dumps(case)
 
     @gl.public.write
     def advance_to_ready(self, case_id: u32) -> None:
@@ -240,6 +280,9 @@ class MandorlaSharedDecision(gl.Contract):
         caller = str(gl.message.sender_address)
         if caller != case["creator"] and caller != case["respondent"]:
             raise gl.vm.UserError("Only case parties can request resolution")
+        required_escrow = int(case["amount_at_stake"]) * 10 ** 18
+        if int(case.get("escrowed_amount_wei", 0)) != required_escrow:
+            raise gl.vm.UserError("Fund escrow to exactly the amount at stake before requesting resolution")
 
         # ── Load all evidence into local memory before the nondet block ──────
         # (reading storage directly inside nondet is not yet supported)
@@ -250,17 +293,16 @@ class MandorlaSharedDecision(gl.Contract):
             if ev_json:
                 ev = json.loads(ev_json)
                 evidence_list.append({
+                    "evidence_id": ev["evidence_id"],
                     "side": ev["side"],
                     "type": ev["evidence_type"],
                     "title": ev["title"],
-                    "summary": ev["summary"],
-                    "weight_hint": ev["weight_hint"],
+                    "source_url": ev["url"],
+                    "content_hash": ev["content_hash"].lower(),
+                    "submitted_by": ev["submitted_by"],
                 })
 
         # ── Build the prompt (deterministic — must happen outside nondet) ─────
-        evidence_json_str = json.dumps(evidence_list, indent=2)
-        prompt = _build_resolution_prompt(case, evidence_json_str)
-
         # Mark as resolving immediately so it cannot be triggered twice
         case["status"] = "resolving"
         self.cases[case_id] = json.dumps(case)
@@ -268,18 +310,25 @@ class MandorlaSharedDecision(gl.Contract):
 
         # ── Non-deterministic GenLayer consensus block ─────────────────────────
         def leader_fn():
+            authenticated_evidence = _load_authenticated_sources(evidence_list)
+            prompt = _build_resolution_prompt(case, json.dumps(authenticated_evidence, indent=2))
             raw = gl.nondet.exec_prompt(prompt, response_format="json")
-            result = _parse_and_validate_result(raw, case)
+            result = _parse_and_validate_result(raw, case, authenticated_evidence)
             return result
 
         def validator_fn(leader_result) -> bool:
             if not isinstance(leader_result, gl.vm.Return):
                 return False
-            return _is_valid_result_structure(leader_result.calldata, case)
+            # Do not trust the leader's well-formed JSON. Every validator re-fetches
+            # and hash-verifies the committed sources, then independently derives a
+            # verdict from those facts before comparing the enforceable decision.
+            validator_result = leader_fn()
+            return _results_agree(leader_result.calldata, validator_result, case)
 
         consensus_result = gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
 
         # ── Store canonical result and finalise case ───────────────────────────
+        consensus_result["settlement"] = _build_settlement(case, consensus_result)
         result_json = json.dumps(consensus_result)
         self.final_results[case_id] = result_json
 
@@ -291,19 +340,37 @@ class MandorlaSharedDecision(gl.Contract):
     @gl.public.write
     def settle_case(self, case_id: u32) -> None:
         """
-        Marks the case as settled after the parties execute the
-        settlement instruction. In a full integration this triggers
-        the actual token transfer based on the result's bps split.
+        Compatibility alias for execute_settlement. This now releases escrow,
+        rather than allowing either party to mark a case settled by assertion.
         """
         case = _load_case(self, case_id)
-        caller = str(gl.message.sender_address)
+        self._execute_settlement(case_id, case)
 
+    @gl.public.write
+    def execute_settlement(self, case_id: u32) -> None:
+        """Release the resolved GEN escrow to the parties' wallet addresses."""
+        self._execute_settlement(case_id, _load_case(self, case_id))
+
+    def _execute_settlement(self, case_id: u32, case: dict) -> None:
+        caller = str(gl.message.sender_address)
         if caller != case["creator"] and caller != case["respondent"]:
             raise gl.vm.UserError("Only case parties can settle")
         if case["status"] != "resolved":
             raise gl.vm.UserError(f"Case must be resolved before settling (status: {case['status']})")
         if not self.final_results.get(case_id, ""):
             raise gl.vm.UserError("No final result found for this case")
+
+        result = json.loads(self.final_results[case_id])
+        settlement = result.get("settlement", {})
+        if settlement.get("execution_status") != "authorized":
+            raise gl.vm.UserError("This outcome requires manual review; escrow cannot be released")
+
+        claimant_amount = u256(int(settlement["claimant_amount_wei"]))
+        respondent_amount = u256(int(settlement["respondent_amount_wei"]))
+        if int(claimant_amount) > 0:
+            _Recipient(Address(case["creator"])).emit_transfer(value=claimant_amount)
+        if int(respondent_amount) > 0:
+            _Recipient(Address(case["respondent"])).emit_transfer(value=respondent_amount)
 
         case["status"] = "settled"
         self.cases[case_id] = json.dumps(case)
@@ -361,6 +428,35 @@ def _load_case(contract: MandorlaSharedDecision, case_id: u32) -> dict:
     return json.loads(case_json)
 
 
+def _load_authenticated_sources(evidence_manifest: list) -> list:
+    """Fetch committed sources inside nondeterminism and reject altered/unavailable proof."""
+    authenticated = []
+    for evidence in evidence_manifest:
+        response = gl.nondet.web.get(evidence["source_url"])
+        body = response.body
+        if isinstance(body, str):
+            body = body.encode("utf-8")
+        digest = hashlib.sha256(body).hexdigest()
+        if digest != evidence["content_hash"]:
+            raise gl.vm.UserError(
+                f"Evidence {evidence['evidence_id']} source hash does not match its on-chain commitment"
+            )
+        authenticated.append({
+            "evidence_id": evidence["evidence_id"],
+            "side": evidence["side"],
+            "type": evidence["type"],
+            "source_url": evidence["source_url"],
+            "content_hash": digest,
+            "submitted_by": evidence["submitted_by"],
+            # A bounded source excerpt keeps prompts viable while the hash binds
+            # the complete fetched artifact.
+            "source_text": body.decode("utf-8", errors="replace")[:12000],
+        })
+    if not authenticated:
+        raise gl.vm.UserError("Resolution requires at least one authenticated evidence source")
+    return authenticated
+
+
 def _build_resolution_prompt(case: dict, evidence_json_str: str) -> str:
     respondent_position = case.get("respondent_position") or "(no response submitted — treat as non-appearance)"
     counter_outcome = case.get("counter_outcome") or "(none)"
@@ -368,7 +464,10 @@ def _build_resolution_prompt(case: dict, evidence_json_str: str) -> str:
     return f"""You are a Mandorla validator resolving a shared-decision case.
 
 Mandorla is a protocol for cases where two or more positions may be partly true.
-Your task is to identify the fairest proportional outcome based on overlapping truths.
+Your task is to identify the fairest proportional outcome based only on the
+authenticated source excerpts below. Positions and summaries are allegations,
+not facts. A source is usable only where its id and SHA-256 commitment appear
+in the evidence manifest.
 
 Core principle: Do not default to a binary winner unless the evidence clearly and strongly supports it.
 Middle does not mean equal. A 65/35 split is a valid middle outcome.
@@ -404,13 +503,14 @@ AMOUNT AT STAKE: {case["amount_at_stake"]} {case["asset_symbol"]}
 ─── EVALUATION REQUIRED ─────────────────────────────────────
 
 Evaluate each of the following before deciding:
-1. What parts of the claimant's position are supported by evidence?
-2. What parts of the respondent's position are supported by evidence?
-3. What facts remain genuinely uncertain?
-4. Did either side overclaim or misrepresent?
-5. Was performance complete, partial, defective, delayed, excused, or misrepresented?
-6. What proportional result best fits the actual overlap of supported facts?
-7. Are there conditions, revision requirements, staged release, or manual review needs?
+1. Extract the material, source-backed facts and cite their evidence IDs.
+2. What parts of the claimant's position are supported by those facts?
+3. What parts of the respondent's position are supported by those facts?
+4. What facts remain genuinely uncertain?
+5. Did either side overclaim or misrepresent?
+6. Was performance complete, partial, defective, delayed, excused, or misrepresented?
+7. What proportional result best fits the actual overlap of supported facts?
+8. Are there conditions, revision requirements, staged release, or manual review needs?
 
 ─── OUTPUT FORMAT ───────────────────────────────────────────
 
@@ -424,6 +524,9 @@ Return ONLY a valid JSON object with exactly these keys and no others:
   "respondent_responsibility_bps": <integer 0-10000>,
   "confidence_bps": <integer 0-10000>,
   "evidence_strength": "<one of: strong | moderate | weak | conflicting | insufficient>",
+  "supported_facts": [
+    {"fact": "<material factual finding grounded in a source>", "evidence_ids": [<evidence_id>]}
+  ],
   "middle_reason": "<one concise paragraph explaining the proportional rationale>",
   "conditions": ["<condition string>"],
   "uncertainties": ["<uncertainty string>"],
@@ -435,11 +538,15 @@ Rules:
 - claimant_responsibility_bps + respondent_responsibility_bps should reflect proportional fault and need not match the payout split.
 - All bps values are integers between 0 and 10000.
 - conditions and uncertainties must be arrays (empty array [] if none).
+- Every material finding and monetary outcome must be justified by one or more
+  evidence_ids in supported_facts. Never cite an ID not in the manifest.
+- If authenticated sources do not establish material facts, return
+  insufficient_evidence with both payout shares set to 0.
 - Do not include markdown fences, comments, or keys not listed above.
 - Do not include any text before or after the JSON object."""
 
 
-def _parse_and_validate_result(raw: any, case: dict) -> dict:
+def _parse_and_validate_result(raw: any, case: dict, authenticated_evidence: list) -> dict:
     """
     Called on the leader node. Parses, cleans, and validates the LLM response.
     Raises gl.vm.UserError to force leader rotation if the response is unusable.
@@ -464,7 +571,7 @@ def _parse_and_validate_result(raw: any, case: dict) -> dict:
         "outcome_type", "claimant_share_bps", "respondent_share_bps",
         "claimant_responsibility_bps", "respondent_responsibility_bps",
         "confidence_bps", "evidence_strength", "middle_reason",
-        "conditions", "uncertainties", "settlement_instruction",
+        "supported_facts", "conditions", "uncertainties", "settlement_instruction",
     ]
     for key in required_keys:
         if key not in raw:
@@ -493,6 +600,8 @@ def _parse_and_validate_result(raw: any, case: dict) -> dict:
         raw["conditions"] = []
     if not isinstance(raw["uncertainties"], list):
         raw["uncertainties"] = []
+    if not _has_valid_fact_citations(raw.get("supported_facts"), authenticated_evidence):
+        raise gl.vm.UserError("Verdict must cite material facts from authenticated evidence")
     if not isinstance(raw["middle_reason"], str) or not raw["middle_reason"].strip():
         raise gl.vm.UserError("middle_reason cannot be empty")
     if not isinstance(raw["settlement_instruction"], str) or not raw["settlement_instruction"].strip():
@@ -502,43 +611,76 @@ def _parse_and_validate_result(raw: any, case: dict) -> dict:
     return {k: raw[k] for k in required_keys}
 
 
-def _is_valid_result_structure(data: any, case: dict) -> bool:
+def _has_valid_fact_citations(facts: any, authenticated_evidence: list) -> bool:
+    if not isinstance(facts, list) or not facts:
+        return False
+    valid_ids = {int(ev["evidence_id"]) for ev in authenticated_evidence}
+    for item in facts:
+        if not isinstance(item, dict) or not isinstance(item.get("fact"), str) or not item["fact"].strip():
+            return False
+        ids = item.get("evidence_ids")
+        if not isinstance(ids, list) or not ids:
+            return False
+        for evidence_id in ids:
+            try:
+                if int(evidence_id) not in valid_ids:
+                    return False
+            except (TypeError, ValueError):
+                return False
+    return True
+
+
+def _results_agree(leader: any, validator: any, case: dict) -> bool:
     """
-    Called on each validator node. Checks structure and validity rather than
-    exact match — LLM outputs are non-deterministic, but the structured
-    fields they produce must satisfy these invariants.
+    Compare independently source-grounded verdicts. The factual prose may vary,
+    but settlement-relevant decisions must agree closely enough to be fair.
     """
-    if not isinstance(data, dict):
+    if not isinstance(leader, dict) or not isinstance(validator, dict):
         return False
     try:
-        if data.get("outcome_type") not in VALID_OUTCOME_TYPES:
+        if leader.get("outcome_type") not in VALID_OUTCOME_TYPES:
             return False
-        if data.get("evidence_strength") not in VALID_EVIDENCE_STRENGTHS:
+        if leader.get("evidence_strength") not in VALID_EVIDENCE_STRENGTHS:
             return False
 
-        c_bps = int(data.get("claimant_share_bps", -1))
-        r_bps = int(data.get("respondent_share_bps", -1))
-        conf = int(data.get("confidence_bps", -1))
-        cr_bps = int(data.get("claimant_responsibility_bps", -1))
-        rr_bps = int(data.get("respondent_responsibility_bps", -1))
+        c_bps = int(leader.get("claimant_share_bps", -1))
+        r_bps = int(leader.get("respondent_share_bps", -1))
+        conf = int(leader.get("confidence_bps", -1))
+        cr_bps = int(leader.get("claimant_responsibility_bps", -1))
+        rr_bps = int(leader.get("respondent_responsibility_bps", -1))
 
         for val in (c_bps, r_bps, conf, cr_bps, rr_bps):
             if not (0 <= val <= 10000):
                 return False
 
-        if data["outcome_type"] not in OPEN_SUM_OUTCOMES:
+        if leader["outcome_type"] not in OPEN_SUM_OUTCOMES:
             if c_bps + r_bps != 10000:
                 return False
+        if leader["outcome_type"] != validator.get("outcome_type"):
+            return False
+        # Manual/no-evidence outcomes are safety gates and must match exactly.
+        if leader["outcome_type"] in OPEN_SUM_OUTCOMES:
+            return int(validator.get("claimant_share_bps", -1)) == c_bps and int(validator.get("respondent_share_bps", -1)) == r_bps
+        # Independent LLM reasoning may differ; 5% is the maximum payout drift.
+        return abs(c_bps - int(validator.get("claimant_share_bps", -1))) <= 500 and abs(r_bps - int(validator.get("respondent_share_bps", -1))) <= 500
 
-        if not isinstance(data.get("middle_reason"), str) or not data["middle_reason"].strip():
-            return False
-        if not isinstance(data.get("conditions"), list):
-            return False
-        if not isinstance(data.get("uncertainties"), list):
-            return False
-        if not isinstance(data.get("settlement_instruction"), str) or not data["settlement_instruction"].strip():
-            return False
-
-        return True
     except (TypeError, ValueError, KeyError):
         return False
+
+
+def _build_settlement(case: dict, result: dict) -> dict:
+    """Deterministic settlement plan; no LLM text can alter the transfer."""
+    escrow = int(case.get("escrowed_amount_wei", 0))
+    if result["outcome_type"] in OPEN_SUM_OUTCOMES:
+        return {
+            "asset": "GEN", "escrowed_amount_wei": escrow,
+            "execution_status": "manual_required",
+            "claimant_amount_wei": 0, "respondent_amount_wei": 0,
+        }
+    claimant = escrow * int(result["claimant_share_bps"]) // 10000
+    return {
+        "asset": "GEN", "escrowed_amount_wei": escrow,
+        "execution_status": "authorized",
+        "claimant_amount_wei": claimant,
+        "respondent_amount_wei": escrow - claimant,
+    }

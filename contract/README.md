@@ -52,9 +52,10 @@ NEXT_PUBLIC_GENLAYER_RPC=https://studio.genlayer.com/api
 | `create_case(...)` | Opens a new case; caller becomes claimant |
 | `respond_to_case(case_id, position, counter_outcome)` | Respondent submits their truth |
 | `submit_evidence(case_id, side, type, ...)` | Adds an evidence tile |
+| `fund_case(case_id)` | Payable: deposits GEN into the case escrow |
 | `advance_to_ready(case_id)` | Moves case to ready_for_resolution |
 | `request_resolution(case_id)` | Triggers GenLayer validator consensus |
-| `settle_case(case_id)` | Marks case settled after instruction executed |
+| `execute_settlement(case_id)` | Releases resolved GEN escrow using the consensus split |
 
 ### Read
 
@@ -86,3 +87,9 @@ NEXT_PUBLIC_GENLAYER_RPC=https://studio.genlayer.com/api
 
 All monetary values use basis points (bps). Divide by 100 for percentages.
 `claimant_share_bps + respondent_share_bps = 10000` for all outcome types except `manual_review`, `insufficient_evidence`, and `shared_fault`.
+
+## Evidence and settlement guarantees
+
+Evidence requires an HTTPS source URL and the source's SHA-256 digest. The party's signed transaction binds its submission to that immutable digest. During resolution, the leader and every validator independently fetch the source, reject a digest mismatch, and derive the verdict from the verified source text. Verdicts must cite evidence IDs in `supported_facts`.
+
+Cases use native GEN escrow. Fund the case with `fund_case` to exactly the stated amount at stake before requesting resolution. The contract calculates the payout amounts deterministically from the agreed verdict and releases escrow through `execute_settlement`; an LLM-generated instruction cannot alter the transfer. Outcomes requiring manual review or insufficient evidence cannot release escrow automatically.

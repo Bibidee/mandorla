@@ -70,10 +70,18 @@ export interface FinalResult {
   respondent_responsibility_bps: number;
   confidence_bps: number;
   evidence_strength: EvidenceStrength;
+  supported_facts?: Array<{ fact: string; evidence_ids: number[] }>;
   middle_reason: string;
   conditions: string[];
   uncertainties: string[];
   settlement_instruction: string;
+  settlement?: {
+    asset: "GEN";
+    escrowed_amount_wei: number;
+    execution_status: "authorized" | "manual_required";
+    claimant_amount_wei: number;
+    respondent_amount_wei: number;
+  };
 }
 
 export interface Case {
@@ -93,7 +101,7 @@ export interface Case {
   evidence_deadline: string;
   resolution_deadline: string;
   status: CaseStatus;
-  locked_amount?: number;
+  escrowed_amount_wei?: number;
   final_result?: FinalResult;
   evidence?: Evidence[];
 }
