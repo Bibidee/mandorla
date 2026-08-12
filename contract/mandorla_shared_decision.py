@@ -525,7 +525,7 @@ Return ONLY a valid JSON object with exactly these keys and no others:
   "confidence_bps": <integer 0-10000>,
   "evidence_strength": "<one of: strong | moderate | weak | conflicting | insufficient>",
   "supported_facts": [
-    {"fact": "<material factual finding grounded in a source>", "evidence_ids": [<evidence_id>]}
+    {{"fact": "<material factual finding grounded in a source>", "evidence_ids": [<evidence_id>]}}
   ],
   "middle_reason": "<one concise paragraph explaining the proportional rationale>",
   "conditions": ["<condition string>"],

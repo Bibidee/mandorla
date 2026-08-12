@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0xD7CAFCbb6e0C4944b95BEf1ee6f0AA0f2abeBF99";
 
 const inputCls =
   "bg-aubergine border border-lavender/20 rounded-lg px-3 py-2 text-sm text-parchment focus:outline-none focus:border-gold/50 placeholder:text-parchment/20 w-full";

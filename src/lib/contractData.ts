@@ -8,7 +8,7 @@ import "server-only";
 import type { Case, Evidence, FinalResult } from "./types";
 
 const RPC_URL = process.env.NEXT_PUBLIC_GENLAYER_RPC ?? "https://studio.genlayer.com/api";
-const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0x952976C1856F9Ba74E0F553EA5563413D810d559";
+const CONTRACT = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS ?? "0xD7CAFCbb6e0C4944b95BEf1ee6f0AA0f2abeBF99";
 // Read-only caller — any address works for view calls
 const READER = "0x0C9479670628D38E72754C3cc5aB8C56C8EbB0E9";
 
